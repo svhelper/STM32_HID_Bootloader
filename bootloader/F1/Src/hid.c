@@ -36,19 +36,11 @@
 /* Flash memory base address */
 #define FLASH_BASE_ADDRESS	0x08000000
 
-/* *
- * PAGE_SIZE : Flash Page size
- *  Low and MEDIUM Density F103 devices have 1 kB Flash page
- *  High Density F103 devices have 2 kB Flash page
- *
- * PAGEMIN : This should be the last page taken by the bootloader
- *  (2 * 1024) or (1 * 2048) In any case, the bootloader size is 2048 bytes
- */
-#if (PAGE_SIZE == 2048)
-#define MIN_PAGE		1
-#else
-#define MIN_PAGE		2
-#endif
+/* Bootloader size */
+#define BOOTLOADER_SIZE			(2 * 1024)
+
+/* HID Bootloader takes 2 kb flash. */
+#define USER_PROGRAM			(FLASH_BASE + BOOTLOADER_SIZE)
 
 /* Maximum packet size */
 #define MAX_PACKET_SIZE		8
@@ -78,10 +70,10 @@ volatile bool UploadFinished;
 static const uint8_t Command[] = {'B', 'T', 'L', 'D', 'C', 'M', 'D', 2};
 
 /* Flash page buffer */
-static uint8_t PageData[PAGE_SIZE];
+static uint8_t PageData[1024];
 
-/* Current page number (starts right after bootloader's end) */
-static volatile uint8_t CurrentPage;
+/* Current flash address */
+static volatile uint32_t CurrentFlashAddress;
 
 /* Byte offset in flash page */
 static volatile uint16_t CurrentPageOffset;
@@ -252,8 +244,6 @@ static uint8_t HIDUSB_PacketIsCommand(void)
 
 static void HIDUSB_HandleData(uint8_t *data)
 {
-	uint16_t *page_address;
-
 	memcpy(PageData + CurrentPageOffset, data, MAX_PACKET_SIZE);
 	CurrentPageOffset += MAX_PACKET_SIZE;
 	if (CurrentPageOffset == COMMAND_SIZE) {
@@ -263,31 +253,33 @@ static void HIDUSB_HandleData(uint8_t *data)
 
 			/* Reset Page Command */
 			UploadStarted = true;
-			CurrentPage = MIN_PAGE;
+			CurrentFlashAddress = USER_PROGRAM;
 			CurrentPageOffset = 0;
 		break;
 
 		case 0x01:
 
 			/* Reboot MCU Command */
+			UploadStarted = false;
 			UploadFinished = true;
+			CurrentPageOffset = 0;
 		break;
 
 		default:
-			break;
+
+			if (UploadStarted == false) {
+				CurrentPageOffset = 0;
+			}
+		break;
 		}
-	} else if (CurrentPageOffset >= PAGE_SIZE) {
-		LED1_ON;
-		page_address = (uint16_t * ) (FLASH_BASE_ADDRESS +
-			(CurrentPage * PAGE_SIZE));
-		FLASH_WritePage(page_address, (uint16_t *) PageData,
-			PAGE_SIZE / 2);
-		CurrentPage++;
+	} else if (CurrentPageOffset >= sizeof (PageData)) {
 		CurrentPageOffset = 0;
+		LED1_ON;
+		FLASH_WritePage((uint16_t * )CurrentFlashAddress, (uint16_t *) PageData,
+			sizeof (PageData) / sizeof (uint16_t));
+		CurrentFlashAddress += sizeof (PageData);
 		LED1_OFF;
-	}
-  
-  if((CurrentPageOffset == 0)||(CurrentPageOffset == 1024)){
+
     USB_SendData(ENDP1, (uint16_t *) Command,
 			sizeof (Command));
   }
@@ -297,7 +289,7 @@ void USB_Reset(void)
 {
 
 	/* Initialize Flash Page Settings */
-	CurrentPage = MIN_PAGE;
+	CurrentFlashAddress = USER_PROGRAM;
 	CurrentPageOffset = 0;
 
 	/* Set buffer descriptor table offset in PMA memory */
