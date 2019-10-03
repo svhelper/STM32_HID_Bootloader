@@ -19,6 +19,40 @@
 #ifndef LED_H_
 #define LED_H_
 
-void pins_init(void);
+#include <stm32f10x.h>
+#include "config.h"
+
+static inline void pins_init(void)
+{
+	SET_BIT(RCC->APB2ENR,
+		LED1_CLOCK | LED2_CLOCK | DISC_CLOCK | RCC_APB2ENR_IOPBEN);
+
+	LED1_BIT_0;
+	LED1_BIT_1;
+	LED1_MODE;
+	LED1_OFF;
+
+	LED2_BIT_0;
+	LED2_BIT_1;
+	LED2_MODE;
+	LED2_OFF;
+
+	DISC_BIT_0;
+	DISC_BIT_1;
+	DISC_MODE;
+	DISC_LOW;
+  
+#if defined PB2_PULLDOWN
+
+	SET_BIT(GPIOB->CRL, GPIO_CRL_CNF2_1);
+	CLEAR_BIT(GPIOB->ODR, GPIO_ODR_ODR2);
+
+#else
+
+	/* PB2 is already in FLOATING mode by default. */
+#endif
+
+}
+
 
 #endif /* LED_H_ */

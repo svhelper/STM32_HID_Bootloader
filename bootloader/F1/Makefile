@@ -8,7 +8,7 @@ VECTOR_TABLE_OFFSET = 0x0000
 # High Density STM32F103 devices have 2 kB Flash Page size  
 PAGE_SIZE = 1024 
 
-C_SRCS = Src/main.c Src/usb.c Src/hid.c Src/led.c Src/flash.c
+C_SRCS = Src/main.c Src/usb.c Src/hid.c Src/flash.c
 
 # Be silent per default, but 'make V=1' will show all compiler calls.
 # If you're insane, V=99 will print out all sorts of things.
@@ -71,6 +71,7 @@ program: $(BUILD_DIR)/$(TARGET).hex
 all: $(SRCS) clean gccversion output info size
 
 maple-mini: $(SRCS) clean gccversion build_maple-mini copy_maple_mini info size
+generic-pc7: $(SRCS) clean gccversion build_generic-pc7 copy_generic-pc7 info size
 generic-pc13: $(SRCS) clean gccversion build_generic-pc13 copy_generic-pc13 info size
 generic-pd2: $(SRCS) clean gccversion build_generic-pd2 copy_generic-pd2 info size
 generic-pd1: $(SRCS) clean gccversion build_generic-pd1 copy_generic-pd1 info size
@@ -90,6 +91,13 @@ build_maple-mini: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).bin
 copy_maple_mini: $(BIN_DIR)
 	$(ECHO) "COPY    $(BIN_DIR)/hid_maple_mini.bin"
 	$(Q)$(CP) $(BUILD_DIR)/$(TARGET).bin $(BIN_DIR)/hid_maple_mini.bin
+
+build_generic-pc7: TARGETFLAGS= -DTARGET_GENERIC_F103_PC7
+build_generic-pc7: LINKER_SCRIPT=STM32F103C8T6.ld
+build_generic-pc7: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).bin
+copy_generic-pc7: $(BIN_DIR)
+	$(ECHO) "COPY    $(BIN_DIR)/hid_generic_pc7.bin"
+	$(Q)$(CP) $(BUILD_DIR)/$(TARGET).bin $(BIN_DIR)/hid_generic_pc7.bin
 
 build_generic-pc13: TARGETFLAGS= -DTARGET_GENERIC_F103_PC13
 build_generic-pc13: LINKER_SCRIPT=STM32F103C8T6.ld
@@ -208,9 +216,9 @@ size: $(BUILD_DIR)/$(TARGET).elf
 	$(ECHO) "SIZE    $<"
 	$(Q)$(SIZE) $(BUILD_DIR)/$(TARGET).elf
 
-$(BUILD_DIR):
+$(BUILD_DIR) $(BIN_DIR):
 	$(ECHO) "MKDIR   $@"
-	$(Q)$(MKDIR) $@
+	-$(Q)$(MKDIR) $@
 
 clean:
 	$(ECHO) "CLEAN"
@@ -223,3 +231,4 @@ clean:
 	$(Q)$(RM) -f $(BUILD_DIR)/$(TARGET).map
 	$(Q)$(RM) -f $(OBJS)
 	-$(Q)$(RMDIR) $(BUILD_DIR)
+	-$(Q)$(RMDIR) $(BIN_DIR)

@@ -86,7 +86,6 @@ SECTIONS
   .data : 
   {
     . = ALIGN(4);
-    . += 0x130;	       /* make room for the isr_vector table in RAM */
     _sdata = .;        /* create a global symbol at data start */
     *(.data)           /* .data sections */
     *(.data*)          /* .data* sections */
@@ -95,6 +94,13 @@ SECTIONS
     _edata = .;        /* define a global symbol at data end */
   } >RAM AT> FLASH
 
+  /* The startup code goes first into FLASH */
+  .isr_ram_vector (NOLOAD) :
+  {
+    . = ALIGN(0x100);
+    *(.isr_ram_vector)
+    . = ALIGN(4);
+  } >RAM
   
   /* Uninitialized data section */
   . = ALIGN(4);
