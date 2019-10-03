@@ -7,6 +7,13 @@ This software is experimental and a work in progress. Under no circumstances sho
 
 ## THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+## Fork info
+In this fork you can find the following changes:
+- High-density devices: fixed bug when the latest 2KB page will not be burned to the MCU if firmware file is not 2KB aligned
+- Config: Added suppurt for 16MHz crystal
+- Config: Added pin for pull-up USB D+ line
+- Code size reducing: use bit-banding for bit manipulations in a registers, other minor refactoring of code
+- Debugging: added Keil project
 
 ## Summary
 This is a driverless (no USB drivers needed, even on Windows) USB HID bootloader
