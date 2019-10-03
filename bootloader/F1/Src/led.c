@@ -28,10 +28,12 @@ void pins_init(void)
 	LED1_BIT_0;
 	LED1_BIT_1;
 	LED1_MODE;
+	LED1_OFF;
 
 	LED2_BIT_0;
 	LED2_BIT_1;
 	LED2_MODE;
+	LED2_OFF;
 
 	DISC_BIT_0;
 	DISC_BIT_1;

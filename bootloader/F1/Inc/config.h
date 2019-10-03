@@ -206,4 +206,27 @@
 #define DISC_HIGH
 #endif
 
+
+#define SET_BIT_BB(REG, BITMASK)		\
+	do { \
+		_Static_assert(((BITMASK) & ((BITMASK)-1)) == 0, "The BITMASK parameter must contain only one set bit!"); \
+		_Static_assert(__builtin_ffs(BITMASK) > 0, "The BITMASK parameter don't contains a set bit!"); \
+		*((__IO uint32_t *)(PERIPH_BB_BASE + (((uint32_t)&(REG)) - PERIPH_BASE) * 32 + (__builtin_ffs(BITMASK)-1) * 4)) = 1; \
+	} while(0)
+
+#define CLEAR_BIT_BB(REG, BITMASK)		\
+	do { \
+		_Static_assert(((BITMASK) & ((BITMASK)-1)) == 0, "The BITMASK parameter must contain only one set bit!"); \
+		_Static_assert(__builtin_ffs(BITMASK) > 0, "The BITMASK parameter don't contains a set bit!"); \
+		*((__IO uint32_t *)(PERIPH_BB_BASE + (((uint32_t)&(REG)) - PERIPH_BASE) * 32 + (__builtin_ffs(BITMASK)-1) * 4)) = 0; \
+	} while(0)
+
+#define READ_BIT_BB(REG, BITMASK)		\
+	( \
+		/* _Static_assert(((BITMASK) & ((BITMASK)-1)) == 0, "The BITMASK parameter must contain only one set bit!"); */ \
+		/* _Static_assert(__builtin_ffs(BITMASK) > 0, "The BITMASK parameter don't contains a set bit!"); */ \
+		*((__IO uint32_t *)(PERIPH_BB_BASE + (((uint32_t)&(REG)) - PERIPH_BASE) * 32 + (__builtin_ffs(BITMASK)-1) * 4)) \
+	)
+
+
 #endif

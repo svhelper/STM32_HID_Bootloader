@@ -54,7 +54,7 @@
 #define USB_LP_CAN1_RX0_IRQ_HANDLER	36
 
 /* Simple function pointer type to call user program */
-typedef void (*funct_ptr)(void);
+typedef void (*funct_ptr)(void) __attribute__((noreturn));
 
 /* The bootloader entry point function prototype */
 void Reset_Handler(void);
@@ -69,9 +69,12 @@ uint32_t *VectorTable[] __attribute__((section(".isr_vector"))) = {
 	(uint32_t *) Reset_Handler
 };
 
-static void delay(uint32_t timeout)
+/* Runtime RAM-based vector table */
+uint32_t ram_vectors[USB_LP_CAN1_RX0_IRQ_HANDLER+1] __attribute__((section(".isr_ram_vector")));
+
+static void delay(void)
 {
-	for (uint32_t i = 0; i < timeout; i++) {
+	for (uint32_t i = 0; i < 200000UL; i++) {
 		__NOP();
 	}
 }
@@ -83,10 +86,10 @@ static bool check_flash_complete(void)
 	}
 	if (UploadStarted == false) {
 		LED1_ON;
-		delay(200000L);
+		delay();
 		LED1_OFF;
-		delay(200000L);
 	}
+	delay();
 	return false;
 }
 
@@ -96,7 +99,7 @@ static bool check_user_code(uint32_t user_address)
 
 	/* Check if the stack pointer in the vector table points
 	   somewhere in SRAM */
-	return ((sp & 0x2FFE0000) == SRAM_BASE) ? true : false;
+	return ((sp & 0xFFFE0000) == SRAM_BASE) ? true : false;
 }
 
 static uint16_t get_and_clear_magic_word(void)
@@ -112,9 +115,9 @@ static uint16_t get_and_clear_magic_word(void)
 		/* Enable write access to the backup registers and the
 		 * RTC.
 		 */
-		SET_BIT(PWR->CR, PWR_CR_DBP);
+		SET_BIT_BB(PWR->CR, PWR_CR_DBP);
 		WRITE_REG(BKP->DR4, 0x0000);
-		CLEAR_BIT(PWR->CR, PWR_CR_DBP);
+		CLEAR_BIT_BB(PWR->CR, PWR_CR_DBP);
 	}
 	CLEAR_BIT(RCC->APB1ENR, RCC_APB1ENR_BKPEN | RCC_APB1ENR_PWREN);
 	return value;
@@ -124,7 +127,7 @@ static void set_sysclock_to_72_mhz(void)
 {
 
 	/* Enable HSE */
-	SET_BIT(RCC->CR, RCC_CR_HSEON);
+	SET_BIT_BB(RCC->CR, RCC_CR_HSEON);
 
 	/* Wait until HSE is ready */
 	while (READ_BIT(RCC->CR, RCC_CR_HSERDY) == 0) {
@@ -136,13 +139,19 @@ static void set_sysclock_to_72_mhz(void)
 
 	/* SYSCLK = PCLK2 = HCLK */
 	/* PCLK1 = HCLK / 2 */
-	/* PLLCLK = HSE * 9 = 72 MHz */
+	/* XTAL_16MHZ: PLLCLK = HSE / 2 * 9 = 72 MHz */
+	/* else:       PLLCLK = HSE * 9 = 72 MHz */
+	/* USBCLK = PLLCLK / 1.5 = 48 MHz */
 	SET_BIT(RCC->CFGR,
 		RCC_CFGR_HPRE_DIV1 | RCC_CFGR_PPRE2_DIV1 | RCC_CFGR_PPRE1_DIV2 |
-		RCC_CFGR_PLLSRC_HSE | RCC_CFGR_PLLMULL9);
+		RCC_CFGR_PLLSRC_HSE | RCC_CFGR_PLLMULL9
+#ifdef XTAL_16MHZ
+		| RCC_CFGR_PLLXTPRE		/* Use HSE / 2 */
+#endif /* XTAL_16MHZ */
+		);
 
 	/* Enable PLL */
-	SET_BIT(RCC->CR, RCC_CR_PLLON);
+	SET_BIT_BB(RCC->CR, RCC_CR_PLLON);
 
 	/* Wait until PLL is ready */
 	while (READ_BIT(RCC->CR, RCC_CR_PLLRDY) == 0) {
@@ -150,7 +159,7 @@ static void set_sysclock_to_72_mhz(void)
 	}
 
 	/* Select PLL as system clock source */
-	SET_BIT(RCC->CFGR, RCC_CFGR_SW_PLL);
+	SET_BIT_BB(RCC->CFGR, RCC_CFGR_SW_PLL);
 
 	/* Wait until PLL is used as system clock source */
 	while (READ_BIT(RCC->CFGR, RCC_CFGR_SWS_1) == 0) {
@@ -160,8 +169,9 @@ static void set_sysclock_to_72_mhz(void)
 
 void Reset_Handler(void)
 {
-	volatile uint32_t *const ram_vectors =
-		(volatile uint32_t *const) SRAM_BASE;
+	/* Initialize GPIOs */
+	pins_init();
+	LED2_OFF;
 
 	/* Setup the system clock (System clock source, PLL Multiplier
 	 * factors, AHB/APBx prescalers and Flash settings)
@@ -180,17 +190,8 @@ void Reset_Handler(void)
 	/* Check for a magic word in BACKUP memory */
 	uint16_t magic_word = get_and_clear_magic_word();
 
-	/* Initialize GPIOs */
-	pins_init();
-
-	/* Wait 1us so the pull-up settles... */
-	delay(72);
-	LED2_OFF;
-
 	UploadStarted = false;
 	UploadFinished = false;
-	funct_ptr UserProgram =
-		(funct_ptr) *(volatile uint32_t *) (USER_PROGRAM + 0x04);
 
 	/* If:
 	 *  - PB2 (BOOT 1 pin) is HIGH or
@@ -199,52 +200,58 @@ void Reset_Handler(void)
 	 *    registers from the Arduino IDE
 	 * then enter HID bootloader...
 	 */
-	if ((magic_word == 0x424C) ||
-		READ_BIT(GPIOB->IDR, GPIO_IDR_IDR2) ||
-		(check_user_code(USER_PROGRAM) == false)) {
-		if (magic_word == 0x424C) {
-
-			/* If a magic word was stored in the
-			 * battery-backed RAM registers from the
-			 * Arduino IDE, exit from USB Serial mode and
-			 * go to HID mode...
-			 */
-			LED2_ON;
-			USB_Shutdown();
-			delay(4000000L);
-		}
-		USB_Init();
-		while (check_flash_complete() == false) {
-			delay(400L);
-		};
-
-		/* Reset the USB */
+	if (magic_word == 0x424C) {
+		/* If a magic word was stored in the
+		 * battery-backed RAM registers from the
+		 * Arduino IDE, exit from USB Serial mode and
+		 * go to HID mode...
+		 */
+		LED2_ON;
 		USB_Shutdown();
+		delay();
+		delay();
 
-		/* Reset the STM32 */
-		NVIC_SystemReset();
+	} else if(
+#ifdef BOOT_IGNORE_PB2
+		READ_BIT(GPIOB->IDR, GPIO_IDR_IDR2) ||
+#endif /* BOOT_IGNORE_PB2 */
+		(check_user_code(USER_PROGRAM) == false)) {
+		/* Do nothing */
+		;
+	} else {
+
+		LED2_ON;
+
+		/* Turn GPIO clocks off */
+		CLEAR_BIT(RCC->APB2ENR,
+			LED1_CLOCK | LED2_CLOCK | DISC_CLOCK/* | RCC_APB2ENR_IOPBEN*/);
+
+		/* Setup the vector table to the final user-defined one in Flash
+		 * memory
+		 */
+		WRITE_REG(SCB->VTOR, USER_PROGRAM);
+
+		/* Setup the stack pointer to the user-defined one */
+		__set_MSP((*(volatile uint32_t *) USER_PROGRAM));
+
+		/* Jump to the user firmware entry point */
+		((funct_ptr)((volatile uint32_t *) USER_PROGRAM)[1])();
 
 		/* Never reached */
 		for (;;) {
 			;
 		}
 	}
-	LED2_ON;
 
-	/* Turn GPIO clocks off */
-	CLEAR_BIT(RCC->APB2ENR,
-		LED1_CLOCK | LED2_CLOCK | DISC_CLOCK/* | RCC_APB2ENR_IOPBEN*/);
+	USB_Init();
+	while (check_flash_complete() == false) {
+	}
 
-	/* Setup the vector table to the final user-defined one in Flash
-	 * memory
-	 */
-	WRITE_REG(SCB->VTOR, USER_PROGRAM);
+	/* Reset the USB */
+	USB_Shutdown();
 
-	/* Setup the stack pointer to the user-defined one */
-	__set_MSP((*(volatile uint32_t *) USER_PROGRAM));
-
-	/* Jump to the user firmware entry point */
-	UserProgram();
+	/* Reset the STM32 */
+	NVIC_SystemReset();
 
 	/* Never reached */
 	for (;;) {

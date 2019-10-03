@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include "config.h"
 #include "usb.h"
 #include "hid.h"
 
@@ -89,16 +90,18 @@ void USB_Shutdown(void)
 	WRITE_REG(*CNTR, CNTR_FRES | CNTR_PDWN);
 
 	/* PA12: General purpose output 50 MHz open drain */
-	SET_BIT(RCC->APB2ENR, RCC_APB2ENR_IOPAEN);
+	SET_BIT_BB(RCC->APB2ENR, RCC_APB2ENR_IOPAEN);
 	MODIFY_REG(GPIOA->CRH,
-		GPIO_CRH_CNF12 | GPIO_CRH_MODE12,
-		GPIO_CRH_CNF12_0 | GPIO_CRH_MODE12);
+		GPIO_CRH_CNF12 | GPIO_CRH_MODE12 |
+		GPIO_CRH_CNF10 | GPIO_CRH_MODE10,
+		GPIO_CRH_CNF12_0 | GPIO_CRH_MODE12 |
+		GPIO_CRH_CNF10_0 | GPIO_CRH_MODE10);
 
-	/* Sinks PA12 to GND */
-	WRITE_REG(GPIOA->BRR, GPIO_BRR_BR12);
+	/* Sinks PA12 and PA10 to GND */
+	WRITE_REG(GPIOA->BRR, GPIO_BRR_BR12 | GPIO_BRR_BR10);
 
 	/* Disable USB Clock on APB1 */
-	CLEAR_BIT(RCC->APB1ENR, RCC_APB1ENR_USBEN);
+	CLEAR_BIT_BB(RCC->APB1ENR, RCC_APB1ENR_USBEN);
 }
 
 void USB_Init(void)
@@ -112,16 +115,21 @@ void USB_Init(void)
 	}
 
 	/* PA12: General purpose Input Float */
-	SET_BIT(RCC->APB2ENR, RCC_APB2ENR_IOPAEN);
+	SET_BIT_BB(RCC->APB2ENR, RCC_APB2ENR_IOPAEN);
 	MODIFY_REG(GPIOA->CRH,
-		GPIO_CRH_CNF12 | GPIO_CRH_MODE12,
-		GPIO_CRH_CNF12_0);
+		GPIO_CRH_CNF12 | GPIO_CRH_MODE12 |
+		GPIO_CRH_CNF10 | GPIO_CRH_MODE10,
+		GPIO_CRH_CNF12_0 |
+		GPIO_CRH_MODE10);
+
+  /* enable pull-up on D+*/
+	WRITE_REG(GPIOA->BSRR, GPIO_BSRR_BS10);
 
 	/* USB devices start as not configured */
 	DeviceConfigured = 0;
 
 	/* Enable USB clock */
-	SET_BIT(RCC->APB1ENR, RCC_APB1ENR_USBEN);
+	SET_BIT_BB(RCC->APB1ENR, RCC_APB1ENR_USBEN);
 
 	/* Enable USB IRQ in Cortex M3 core */
 	NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
@@ -177,7 +185,7 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 			/* If device address is assigned, then reset it */
 			if (READ_REG(*DADDR) & USB_DADDR_ADD) {
 				WRITE_REG(*DADDR, 0);
-				CLEAR_BIT(*CNTR, CNTR_SUSPM);
+				CLEAR_BIT_BB(*CNTR, CNTR_SUSPM);
 			}
 		}
 
